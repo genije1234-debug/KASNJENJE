@@ -101,10 +101,10 @@ function parseScore(s) {
   return { home: +m[1], away: +m[2], total: +m[1] + +m[2] };
 }
 
-// Admiral suspendovan = BILO KOJI oblik (bet/outcome/event level)
+// Suspend = SIROVI suspend flag iz Admiral WS-a (bet-level suspend, b2*b3*b4) ili event-level.
+// Kvote po ishodu (oddsSupp/outcomeSusp) se NE gledaju.
 function admSuspended(adm) {
-  const s = adm.oddsSupp || {};
-  return !!(s.home || s.draw || s.away || adm.suspended);
+  return !!(adm.betSusp || adm.suspended);
 }
 
 // ── stanje ────────────────────────────────────────────────────────────────────
@@ -157,6 +157,7 @@ async function doPoll() {
         bwinGoalScore: null,
         gkDone:        false,
         ggDone:        false,
+        prevRealSusp:  false,            // prethodno stanje PRAVOG suspenda (za rising edge)
         histEntry:     null,
       });
     }
@@ -178,8 +179,8 @@ async function doPoll() {
           st.bwinGoalTs    = gTs;
           st.bwinGoalScore = bwin.score;
           st.ggDone        = false;
-          // Ako je Admiral već suspendovan (bilo koji oblik) u momentu gola → GK = 0
-          const suppAtGoal = admSuspended(adm) && (!adm.suspTs || adm.suspTs < gTs);
+          // Ako je Admiral već PRAVO suspendovan (bet-level/event) u momentu gola → GK = 0
+          const suppAtGoal = admSuspended(adm);
           st.gkDone = suppAtGoal;
           st.histEntry = {
             ts:        new Date().toLocaleTimeString("sr"),
@@ -193,14 +194,16 @@ async function doPoll() {
         }
       }
 
-      // ── GK: Admiral suspendovao (bilo koji oblik) POSLE gola ──────────────
-      // Koristi IZVORNI suspTs iz 3201 → tačno i otporno na poll (suspTs ostaje zapisan)
-      if (st.bwinGoalTs && !st.gkDone && adm.suspTs && adm.suspTs >= st.bwinGoalTs) {
-        const gk = ((adm.suspTs - st.bwinGoalTs) / 1000).toFixed(2);
+      // ── GK: Admiral REALNO suspendovao (bet-level / event) POSLE gola ─────────
+      //     Gleda se SAMO sirovi suspend iz WS (rising edge), kvote po ishodu se IGNORIŠU.
+      const realSuspNow = admSuspended(adm);
+      if (st.bwinGoalTs && !st.gkDone && realSuspNow && !st.prevRealSusp) {
+        const gk = ((Date.now() - st.bwinGoalTs) / 1000).toFixed(2);
         st.gkDone = true;
         if (st.histEntry) st.histEntry.gk = gk;
         console.log(`[GK] ${bwin.name}  ${gk}s`);
       }
+      st.prevRealSusp = realSuspNow;
 
       // ── GG: Admiral uhvatio score ─────────────────────────────────────────
       if (st.bwinGoalTs && !st.ggDone && bs && as && as.total >= bs.total) {

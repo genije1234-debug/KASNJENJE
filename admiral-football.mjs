@@ -119,7 +119,8 @@ function makeMatch(evId, name, league, sportId, regionId, compId, playable) {
 
 // Efektivni suspend = bilo koji oblik (bet-level, bilo koji outcome, ili event-level)
 function effSusp(m) {
-  return m.betSusp || m.outcomeSusp.home || m.outcomeSusp.draw || m.outcomeSusp.away || m.suspended;
+  // PRAVI suspend iz WS = bet-level (b2*b3*b4) ili event-level. Kvote (outcomeSusp) se NE računaju.
+  return m.betSusp || m.suspended;
 }
 function updateSuspTs(m) {
   const eff = effSusp(m);
@@ -535,11 +536,12 @@ const server = http.createServer((req, res) => {
         time:     m.time,
         status:   m.status,
         suspended: m.suspended,
-        odds:     m.odds,
-        oddsSupp: {
-          home: m.betSusp || m.outcomeSusp.home,
-          draw: m.betSusp || m.outcomeSusp.draw,
-          away: m.betSusp || m.outcomeSusp.away,
+          betSusp:  m.betSusp,   // SIROVI bet-level suspend iz WS (b2*b3*b4) — pravi suspend
+          odds:     m.odds,
+          oddsSupp: {
+            home: m.betSusp || m.outcomeSusp.home,
+            draw: m.betSusp || m.outcomeSusp.draw,
+            away: m.betSusp || m.outcomeSusp.away,
         },
         goalFlash: m._goalTs > 0 && (now - m._goalTs) < 3000,
         suspTs:  m._suspTs,   // tačan trenutak zadnjeg prelaza u suspend (ms epoch)
